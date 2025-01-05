@@ -8,6 +8,10 @@
     update_packages: true
 
   tasks:
+    - name: Display Linux Distribution
+      debug:
+        msg: "Server {{ inventory_hostname }} is {{ ansible_distribution }}."
+
     - name: Check for updates on Debian-based systems (e.g., Ubuntu)
       apt:
         upgrade: dist
