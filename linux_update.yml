@@ -63,7 +63,7 @@
       when: dpkg_restart_needed is changed
 
     - name: Check if a restart is needed on Red Hat-based systems
-      command: need-restarting -r
+      command: needs-restarting -r
       register: rpm_restart_needed
       failed_when: rpm_restart_needed.rc != 0
       when: ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "Rocky"
