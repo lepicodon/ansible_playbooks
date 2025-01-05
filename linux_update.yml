@@ -1,46 +1,90 @@
 ---
-# Source: https://github.com/ConnerWill/Ansible-Update/tree/main
-
-# Playbook to update Linux servers running various distributions
-- name: Update Linux servers
+- name: Update and Restart Linux Servers
   hosts: all
-  become: true # Run tasks with root privileges
+  become: true
+  gather_facts: true
+  
+  vars:
+    update_packages: true
 
   tasks:
-    # Task to update Debian-based Linux distributions
-    - name: Update Debian-based Linux distributions
-      when: ansible_distribution in ['Debian', 'Ubuntu', 'LinuxMint']
-      ansible.builtin.apt:
-        upgrade: true
+    - name: Check for updates on Debian-based systems (e.g., Ubuntu)
+      apt:
+        upgrade: dist
         update_cache: true
-        cache_valid_time: 3600
+      register: apt_update_result
+      when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
 
-    # Task to update Arch Linux
-    - name: Update Arch-based Linux distributions
-      when: ansible_distribution == 'Arch Linux'
-      community.general.pacman:
+    - name: Apply updates on Debian-based systems if any are available
+      apt:
+        upgrade: dist
+        force: true
+      when: apt_update_result is changed
+
+    - name: Check for updates on Red Hat-based systems (e.g., CentOS, RHEL, Rocky Linux)
+      yum:
         update_cache: true
-        upgrade: true
+      register: yum_update_result
+      when: ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "Rocky"
 
-    # Task to update CentOS-based Linux distributions
-    - name: Update CentOS-based Linux distributions
-      when: ansible_distribution in ['CentOS', 'RedHat', 'OracleLinux', 'Amazon']
-      ansible.builtin.yum:
-        name: '*'
-        state: latest
-        update_only: true # Updates but does not install additional packages.
+    - name: Apply updates on Red Hat-based systems if any are available
+      yum:
+        upgrade: dist
+        force: true
+      when: yum_update_result is changed
 
-    # Task to update Fedora-based Linux distributions
-    - name: Update Fedora-based Linux distributions
-      when: ansible_distribution == 'Fedora'
-      ansible.builtin.dnf:
-        name: '*'
-        state: latest
-        update_only: true # Updates but does not install additional packages.
+    - name: Check for updates on SUSE-based systems (e.g., openSUSE)
+      zypper:
+        update_cache: true
+      register: zypper_update_result
+      when: ansible_distribution == "SuSE"
 
-    # Task to update openSUSE-based Linux distributions
-    - name: Update openSUSE-based Linux distributions
-      when: ansible_distribution in ['openSUSE Leap', 'SUSE Linux Enterprise Server']
-      community.general.zypper:
-        name: '*'
-        state: latest
+    - name: Apply updates on SUSE-based systems if any are available
+      zypper:
+        upgrade: dist
+        force: true
+      when: zypper_update_result is changed
+
+    - name: Check if a restart is needed on Debian-based systems
+      command: dpkg-query -W --showformat='${Status}\n' | grep -c 'needs-restarting'
+      register: dpkg_restart_needed
+      failed_when: dpkg_restart_needed.stdout != "0"
+      when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+
+    - name: Restart the server if updates require it (Debian-based)
+      command: reboot
+      async: 1h
+      poll: 0
+      ignore_errors: true
+      when: dpkg_restart_needed is changed
+
+    - name: Check if a restart is needed on Red Hat-based systems
+      shell: rpm -qa | grep -q needs-restarting
+      register: rpm_restart_needed
+      failed_when: rpm_restart_needed.rc != 0
+      when: ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "Rocky"
+
+    - name: Restart the server if updates require it (Red Hat-based)
+      command: reboot
+      async: 1h
+      poll: 0
+      ignore_errors: true
+      when: rpm_restart_needed is changed
+
+    - name: Check if a restart is needed on SUSE-based systems
+      shell: zypper search --state changeable | grep -q '*'
+      register: zypper_restart_needed
+      failed_when: zypper_restart_needed.rc != 0
+      when: ansible_distribution == "SuSE"
+
+    - name: Restart the server if updates require it (SUSE-based)
+      command: reboot
+      async: 1h
+      poll: 0
+      ignore_errors: true
+      when: zypper_restart_needed is changed
+
+    - name: Notify user about restarts that were scheduled
+      debug:
+        msg: "Server {{ inventory_hostname }} has been scheduled for a restart."
+      when: dpkg_restart_needed is changed or rpm_restart_needed is changed or zypper_restart_needed is changed
