@@ -57,7 +57,7 @@
 
     - name: Restart the server if updates require it (Debian-based)
       command: reboot
-      async: 1h
+      async: 600
       poll: 0
       ignore_errors: true
       when: dpkg_restart_needed is changed
@@ -70,7 +70,7 @@
 
     - name: Restart the server if updates require it (Red Hat-based)
       command: reboot
-      async: 1h
+      async: 600
       poll: 0
       ignore_errors: true
       when: rpm_restart_needed is changed
@@ -83,7 +83,7 @@
 
     - name: Restart the server if updates require it (SUSE-based)
       command: reboot
-      async: 1h
+      async: 600
       poll: 0
       ignore_errors: true
       when: zypper_restart_needed is changed
