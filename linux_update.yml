@@ -42,7 +42,7 @@
           - "Updates available: {{ updates_available }}"
           - "Packages to be updated:"
           - "{{ check_updates_result.updates | default([]) }}"
-      when: updates_available
+      # when: updates_available
 
     - name: Apply updates on Red Hat-based systems if any are available
       package:
