@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Linux Patching Report - {{ ansible_hostname }} - {{ current_datetime }}</title>
+    <style>
+        body { font-family: sans-serif; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Linux Patching Report</h1>
+    <p><strong>Date and Time:</strong> {{ current_datetime }}</p>
+    <p><strong>Hostname:</strong> {{ ansible_hostname }}</p>
+
+    <h2>System Uptime</h2>
+    <table>
+        <tr><th>Before Patching</th><th>After Patching</th></tr>
+        <tr><td>{{ uptime_human_before }} ({{ uptime_seconds_before }} seconds)</td><td>{{ uptime_human_after }} ({{ uptime_seconds_after }} seconds)</td></tr>
+    </table>
+
+    <h2>Operating System Version</h2>
+    <table>
+        <tr><th>Before Patching</th><th>After Patching</th></tr>
+        <tr><td>{{ os_distribution_before }} (Kernel: {{ os_kernel_before }})</td><td>{{ os_distribution_after }} (Kernel: {{ os_kernel_after }})</td></tr>
+    </table>
+
+    {% if updates_available %}
+    <h2>Packages Updated</h2>
+    <p>The following packages were updated:</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Package Name</th>
+                <th>Version Before</th>
+                <th>Version After</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for package_change in install_updates_result.updates %}
+            <tr>
+                <td>{{ package_change.name }}</td>
+                <td>
+                    {% set before_pkg = packages_before_update.results | selectattr('name', 'equalto', package_change.name) | list | first %}
+                    {% if before_pkg and before_pkg.version %}
+                        {{ before_pkg.version }}
+                    {% else %}
+                        N/A (New Install?)
+                    {% endif %}
+                </td>
+                <td>{{ package_change.version }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p>No updates were available.</p>
+    {% endif %}
+
+    <h2>Reboot Status</h2>
+    <p>Reboot Required: <strong>{{ reboot_required }}</strong></p>
+    {% if reboot_required and reboot_result.rebooted %}
+        <p>Server was rebooted successfully.</p>
+    {% elif reboot_required and not reboot_result.rebooted %}
+        <p>Reboot was required but may not have been successful. Check server status.</p>
+    {% else %}
+        <p>No reboot was performed.</p>
+    {% endif %}
+
+</body>
+</html>
