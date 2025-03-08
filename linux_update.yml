@@ -1,5 +1,5 @@
 ---
-- name: Update and Restart Linux Servers
+- name: Update and Restart Linux Red Hat Servers
   hosts: all
   become: true
   gather_facts: true
@@ -8,87 +8,55 @@
     update_packages: true
 
   tasks:
-    - name: Display Linux Distribution
+    - name: Display Distribution
       debug:
-        msg: "Server {{ inventory_hostname }} is {{ ansible_distribution }}."
+        msg: "Server {{ inventory_hostname }} is: {{ ansible_distribution }} {{ ansible_distribution_version }} {{ ansible_distribution_release }}."
 
-    - name: Check for updates on Debian-based systems (e.g., Ubuntu)
-      apt:
-        upgrade: dist
-        update_cache: true
-      register: apt_update_result
-      when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
+    - name: Check for available updates (dry-run)
+      package:
+        name: "*"
+        state: latest
+      check_mode: yes
+      register: check_updates_result
+      failed_when: false # Don't fail if no updates are available
 
-    - name: Apply updates on Debian-based systems if any are available
-      apt:
-        upgrade: dist
-        force: true
-      when: apt_update_result is changed
+    - name: Set fact for available updates
+      set_fact:
+        updates_available: "{{ check_updates_result.changed }}"
 
-    - name: Check for updates on Red Hat-based systems (e.g., CentOS, RHEL, Rocky Linux)
-      yum:
-        update_cache: true
-      register: yum_update_result
-      when: ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "Rocky"
+    - name: Count and list available updates
+      debug:
+        msg:
+          - "Updates available: {{ updates_available }}"
+          - "Packages to be updated:"
+          - "{{ check_updates_result.updates | default([]) }}"
+      when: updates_available
 
-    - name: Apply updates on Red Hat-based systems if any are available
-      yum:
-        upgrade: dist
-        force: true
-      when: yum_update_result is changed
+    - name: Install updates
+      package:
+        name: "*"
+        state: latest
+      register: install_updates_result
+      when: updates_available
 
-    - name: Check for updates on SUSE-based systems (e.g., openSUSE)
-      zypper:
-        update_cache: true
-      register: zypper_update_result
-      when: ansible_distribution == "SuSE"
-
-    - name: Apply updates on SUSE-based systems if any are available
-      zypper:
-        upgrade: dist
-        force: true
-      when: zypper_update_result is changed
-
-    - name: Check if a restart is needed on Debian-based systems
-      command: dpkg-query -W --showformat='${Status}\n' | grep -c 'needs-restarting'
-      register: dpkg_restart_needed
-      failed_when: dpkg_restart_needed.stdout != "0"
-      when: ansible_distribution == "Debian" or ansible_distribution == "Ubuntu"
-
-    - name: Restart the server if updates require it (Debian-based)
-      command: reboot
-      async: 600
-      poll: 0
-      ignore_errors: true
-      when: dpkg_restart_needed is changed
-
-    - name: Check if a restart is needed on Red Hat-based systems
+    - name: Check if a restart is needed
       command: needs-restarting -r
       register: rpm_restart_needed
       failed_when: rpm_restart_needed.rc != 0
-      when: ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "Rocky"
 
-    - name: Restart the server if updates require it (Red Hat-based)
-      command: reboot
-      async: 600
-      poll: 0
+    - name: Reboot the server if required
+      reboot:
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 10
       ignore_errors: true
+      register: reboot_result
       when: rpm_restart_needed is changed
 
-    - name: Check if a restart is needed on SUSE-based systems
-      shell: zypper search --state changeable | grep -q '*'
-      register: zypper_restart_needed
-      failed_when: zypper_restart_needed.rc != 0
-      when: ansible_distribution == "SuSE"
+    - name: Log OS Distribution and Version
+      gather_facts: # Re-gather facts
 
-    - name: Restart the server if updates require it (SUSE-based)
-      command: reboot
-      async: 600
-      poll: 0
-      ignore_errors: true
-      when: zypper_restart_needed is changed
-
-    - name: Notify user about restarts that were scheduled
+    - name: Display Distribution Post Patching
       debug:
-        msg: "Server {{ inventory_hostname }} has been scheduled for a restart."
-      when: dpkg_restart_needed is changed or rpm_restart_needed is changed or zypper_restart_needed is changed
+        msg: "Server {{ inventory_hostname }} is: {{ ansible_distribution }} {{ ansible_distribution_version }} {{ ansible_distribution_release }}."
+
