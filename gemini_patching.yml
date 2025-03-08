@@ -16,11 +16,11 @@
 
   tasks:
     - name: Log OS Distribution and Version (Before Patching)
-          set_fact:
-            os_distribution_before: "{{ ansible_distribution }} {{ ansible_distribution_version }} {{ ansible_distribution_release }}"
-            os_kernel_before: "{{ ansible_kernel }}"
-            uptime_seconds_before: "{{ ansible_uptime_seconds }}"
-            current_datetime: "{{ ansible_date_time.iso8601_basic }}"
+      set_fact:
+        os_distribution_before: "{{ ansible_distribution }} {{ ansible_distribution_version }} {{ ansible_distribution_release }}"
+        os_kernel_before: "{{ ansible_kernel }}"
+        uptime_seconds_before: "{{ ansible_uptime_seconds }}"
+        current_datetime: "{{ ansible_date_time.iso8601_basic }}"
 
     - name: Update package cache (if needed)
       become: true
