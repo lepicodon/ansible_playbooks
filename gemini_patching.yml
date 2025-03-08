@@ -1,0 +1,139 @@
+---
+- hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    report_file: "/tmp/patching_report.html"
+    email_recipient: ""  # Change this!
+    email_subject: "Patching Report - {{ ansible_hostname }} - {{ ansible_date_time.iso8601_basic_short }}"
+    email_from: "" # Change this!
+    email_smtp_server: "" # Change this!
+    email_smtp_port: "" # or 465, 587 depending on your SMTP server
+    email_smtp_user: "" # Optional, if your SMTP requires auth
+    email_smtp_password: "" # Optional, if your SMTP requires auth
+    reboot_timeout: 300 # Timeout in seconds for reboot
+    package_manager: "{{ ansible_pkg_mgr }}" # Automatically detect package manager
+
+  tasks:
+    - name: Log OS Distribution and Version (Before Patching)
+      set_fact:
+        os_distribution_before: "{{ ansible_distribution }} {{ ansible_distribution_version }} {{ ansible_distribution_release }}"
+        os_kernel_before: "{{ ansible_kernel }}"
+        uptime_seconds_before: "{{ ansible_uptime_seconds }}"
+        uptime_human_before: "{{ ansible_uptime_seconds | to_timedelta }}"
+        current_datetime: "{{ ansible_date_time.iso8601_basic }}"
+
+    - name: Update package cache (if needed)
+      become: true
+      package:
+        update_cache: yes
+      register: update_cache_result
+      changed_when: update_cache_result.changed
+
+    - name: Check for available updates (dry-run)
+      become: true
+      package:
+        name: "*"
+        state: latest
+      check_mode: yes
+      register: check_updates_result
+      failed_when: false # Don't fail if no updates are available
+
+    - name: Set fact for available updates
+      set_fact:
+        updates_available: "{{ check_updates_result.changed }}"
+
+    - name: Count and list available updates
+      debug:
+        msg:
+          - "Updates available: {{ updates_available }}"
+          - "Packages to be updated:"
+          - "{{ check_updates_result.updates | default([]) }}"
+      when: updates_available
+
+    - name: Record package versions before update
+      package:
+        name: "*"
+      register: packages_before_update
+      delegate_to: localhost  # Run this on the control machine
+      run_once: true
+      become: false # No need to become root on control machine
+
+    - name: Install updates
+      become: true
+      package:
+        name: "*"
+        state: latest
+      register: install_updates_result
+      when: updates_available
+
+    - name: Record package versions after update
+      package:
+        name: "*"
+      register: packages_after_update
+      delegate_to: localhost  # Run this on the control machine
+      run_once: true
+      become: false # No need to become root on control machine
+      when: updates_available
+
+    - name: Check if reboot is required (generic method)
+      command: needs-restarting -r || touch /tmp/reboot_required # needs-restarting might not exist on all systems
+      register: reboot_check_result
+      failed_when: reboot_check_result.rc > 1 # needs-restarting returns 1 if reboot is needed, 0 if not, >1 for errors
+      changed_when: reboot_check_result.rc == 1
+      ignore_errors: yes # Ignore if needs-restarting is not installed
+
+    - name: Check for reboot required file (fallback)
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_file_check
+      when: reboot_check_result is failed or reboot_check_result.rc > 1
+
+    - name: Set fact if reboot is required
+      set_fact:
+        reboot_required: "{{ reboot_check_result.changed or reboot_file_check.stat.exists }}"
+
+    - name: Reboot the server if required
+      reboot:
+        connect_timeout: 5
+        reboot_timeout: "{{ reboot_timeout }}"
+        pre_reboot_delay: 10
+      when: reboot_required
+      register: reboot_result
+
+    - name: Wait for server to come back online after reboot (if rebooted)
+      wait_for_connection:
+        timeout: "{{ reboot_timeout }}"
+      when: reboot_required and reboot_result.rebooted
+
+    - name: Log OS Distribution and Version (After Patching)
+      gather_facts: # Re-gather facts after reboot
+      when: reboot_required and reboot_result.rebooted
+
+    - name: Log OS Distribution and Version (After Patching - no reboot)
+      gather_facts: # Re-gather facts if no reboot happened
+      when: not reboot_required
+
+    - name: Set facts for post-patching information
+      set_fact:
+        os_distribution_after: "{{ ansible_distribution }} {{ ansible_distribution_version }} {{ ansible_distribution_release }}"
+        os_kernel_after: "{{ ansible_kernel }}"
+        uptime_seconds_after: "{{ ansible_uptime_seconds }}"
+        uptime_human_after: "{{ ansible_uptime_seconds | to_timedelta }}"
+
+    - name: Generate HTML Report
+      template:
+        src: report.html.j2
+        dest: "{{ report_file }}"
+
+    - name: Send Email Report
+      mail:
+        host: "{{ email_smtp_server }}"
+        port: "{{ email_smtp_port }}"
+        username: "{{ email_smtp_user }}"
+        password: "{{ email_smtp_password }}"
+        from: "{{ email_from }}"
+        to: "{{ email_recipient }}"
+        subject: "{{ email_subject }}"
+        body: "{{ lookup('file', report_file) }}"
+        content_type: text/html
