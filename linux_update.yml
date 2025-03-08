@@ -71,9 +71,9 @@
 
     - name: Restart the server if updates require it (Red Hat-based)
       command: reboot
-      connect_timeout: 5
-      reboot_timeout: 300
-      pre_reboot_delay: 10
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 10
       ignore_errors: true
       register: reboot_result
       when: rpm_restart_needed is changed
