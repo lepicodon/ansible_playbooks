@@ -12,11 +12,10 @@
       debug:
         msg: "Server {{ inventory_hostname }} is: {{ ansible_distribution }} {{ ansible_distribution_version }} {{ ansible_distribution_release }}."
 
-    - name: Check for available updates (dry-run)
+    - name: Check for available updates
       package:
         name: "*"
         state: latest
-      check_mode: yes
       register: check_updates_result
       failed_when: false # Don't fail if no updates are available
 
