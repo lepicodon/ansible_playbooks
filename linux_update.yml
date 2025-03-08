@@ -32,12 +32,24 @@
       register: yum_update_result
       when: ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "Rocky"
 
+    - name: Set fact for available updates
+      set_fact:
+        updates_available: "{{ yum_update_result.changed }}"
+
+    - name: Count and list available updates
+      debug:
+        msg:
+          - "Updates available: {{ updates_available }}"
+          - "Packages to be updated:"
+          - "{{ check_updates_result.updates | default([]) }}"
+      when: updates_available
+
     - name: Apply updates on Red Hat-based systems if any are available
-      yum:
-        upgrade: dist
-        force: true
+      package:
+        name: "*"
+        state: latest
       register: install_updates_result
-      when: yum_update_result is changed
+      when: updates_available
 
     - name: Record package versions after update
       package:
@@ -53,12 +65,17 @@
       failed_when: rpm_restart_needed.rc != 0
       when: ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "Rocky"
 
+    - name: Set fact if reboot is required
+      set_fact:
+        reboot_required: "{{ rpm_restart_needed.changed }}"
+
     - name: Restart the server if updates require it (Red Hat-based)
       command: reboot
       connect_timeout: 5
       reboot_timeout: 300
       pre_reboot_delay: 10
       ignore_errors: true
+      register: reboot_result
       when: rpm_restart_needed is changed
 
     - name: Log OS Distribution and Version (After Patching)
