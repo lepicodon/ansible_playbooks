@@ -55,9 +55,6 @@
       package:
         name: "*"
       register: packages_after_update
-      delegate_to: localhost  # Run this on the control machine
-      run_once: true
-      become: false # No need to become root on control machine
 
     - name: Check if a restart is needed on Red Hat-based systems
       command: needs-restarting -r
