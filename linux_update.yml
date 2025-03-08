@@ -51,11 +51,6 @@
       register: install_updates_result
       when: updates_available
 
-    - name: Record package versions after update
-      package:
-        name: "*"
-      register: packages_after_update
-
     - name: Check if a restart is needed on Red Hat-based systems
       command: needs-restarting -r
       register: rpm_restart_needed
